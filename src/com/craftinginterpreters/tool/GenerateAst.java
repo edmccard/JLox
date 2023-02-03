@@ -3,8 +3,6 @@ package com.craftinginterpreters.tool;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.util.Arrays;
-import java.util.List;
 
 public class GenerateAst {
     public static void main(String[] args) throws FileNotFoundException, UnsupportedEncodingException {
@@ -13,17 +11,32 @@ public class GenerateAst {
             System.exit(64);
         }
         String outputDir = args[0];
-        defineAst(outputDir, "Expr", Arrays.asList(
+        defineAst(outputDir, "Expr", new String[]{
+                "Assign   : Token name, Expr value",
                 "Binary   : Expr left, Token operator, Expr right",
+                "Call     : Expr callee, Token paren, List<Expr> arguments",
                 "Grouping : Expr expression",
                 "Literal  : Object value",
+                "Logical  : Expr left, Token operator, Expr right",
                 "Unary    : Token operator, Expr right",
+                "Variable : Token name",
                 "Ternary  : Expr cond, Expr ifTrue, Expr ifFalse"
-        ));
+        });
+
+        defineAst(outputDir, "Stmt", new String[]{
+                "Block      : List<Stmt> statements",
+                "Break      : ",
+                "Expression : Expr expression",
+                "Function   : Token name, List<Token> params, List<Stmt> body",
+                "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",
+                "Print      : Expr expression",
+                "Var        : Token name, Expr initializer",
+                "While      : Expr condition, Stmt body"
+        });
     }
 
     private static void defineAst(
-            String outputDir, String baseName, List<String> types)
+            String outputDir, String baseName, String[] types)
             throws FileNotFoundException, UnsupportedEncodingException {
         String path = outputDir + "/" + baseName + ".java";
         PrintWriter writer = new PrintWriter(path, "UTF-8");
@@ -62,9 +75,11 @@ public class GenerateAst {
 
         // Store parameters in fields.
         String[] fields = fieldList.split(", ");
-        for (String field : fields) {
-            String name = field.split(" ")[1];
-            writer.println("      this." + name + " = " + name + ";");
+        if (!fieldList.isEmpty()) {
+            for (String field : fields) {
+                String name = field.split(" ")[1];
+                writer.println("      this." + name + " = " + name + ";");
+            }
         }
 
         writer.println("    }");
@@ -78,22 +93,24 @@ public class GenerateAst {
         writer.println("    }");
 
         // Fields.
-        writer.println();
-        for (String field : fields) {
-            writer.println("    final " + field + ";");
+        if (!fieldList.isEmpty()) {
+            writer.println();
+            for (String field : fields) {
+                writer.println("    final " + field + ";");
+            }
         }
 
         writer.println("  }");
     }
 
     private static void defineVisitor(
-            PrintWriter writer, String baseName, List<String> types) {
+            PrintWriter writer, String baseName, String[] types) {
         writer.println("  interface Visitor<R> {");
 
         for (String type : types) {
             String typeName = type.split(":")[0].trim();
             writer.println("    R visit" + typeName + baseName + "(" +
-                    typeName +" " + baseName.toLowerCase() + ");");
+                    typeName + " " + baseName.toLowerCase() + ");");
         }
 
         writer.println("  }");
