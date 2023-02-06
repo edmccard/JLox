@@ -1,5 +1,6 @@
 ### IntelliJ IDEA ###
 .idea/workspace.xml
+.idea/vcs.xml
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
