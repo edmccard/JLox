@@ -13,9 +13,11 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     private sealed interface ResolveType
             permits ResolveType.Declared, ResolveType.Defined, ResolveType.Used {
-        record Declared() implements ResolveType {}
-        record Defined(int line) implements ResolveType {}
-        record Used() implements ResolveType {}
+        record Declared(int idx) implements ResolveType {}
+        record Defined(int line, int idx) implements ResolveType {}
+        record Used(int idx) implements ResolveType {}
+
+        int idx();
     }
 
     private final Interpreter interpreter;
@@ -42,7 +44,7 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     }
 
     private void beginScope() {
-        scopes.push(new HashMap<String, ResolveType>());
+        scopes.push(new HashMap<>());
     }
 
     private void endScope() {
@@ -64,25 +66,37 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
             Lox.error(name,
                     "Already a variable with this name in this scope.");
         }
-        scope.put(name.lexeme(), new ResolveType.Declared());
+        scope.put(name.lexeme(), new ResolveType.Declared(scope.size()));
     }
 
     private void define(Token name) {
         if (scopes.isEmpty()) return;
-        scopes.peek().put(name.lexeme(), new ResolveType.Defined(name.line()));
+        var scope = scopes.peek();
+        var info = scope.get(name.lexeme());
+        scope.put(name.lexeme(),
+                new ResolveType.Defined(name.line(), info.idx()));
     }
 
     private void use(Token name) {
         if (scopes.isEmpty()) return;
-        scopes.peek().put(name.lexeme(), new ResolveType.Used());
+        var scope = scopes.peek();
+        var info = scope.get(name.lexeme());
+        scope.put(name.lexeme(), new ResolveType.Used(info.idx()));
     }
 
     private void resolveLocal(Expr expr, Token name) {
+        resolveLocal(expr, name, true);
+    }
+
+    private void resolveLocal(Expr expr, Token name, boolean isUse) {
         for (int i = scopes.size() - 1; i >= 0; i--) {
             Map<String, ResolveType> scope = scopes.get(i);
-            if (scope.containsKey(name.lexeme())) {
-                scope.put(name.lexeme(), new ResolveType.Used());
-                interpreter.resolve(expr, scopes.size() - 1 - i);
+            var info = scope.get(name.lexeme());
+            if (info != null) {
+                if (isUse) {
+                    scope.put(name.lexeme(), new ResolveType.Used(info.idx()));
+                }
+                interpreter.resolve(expr, scopes.size() - 1 - i, info.idx());
                 return;
             }
         }
@@ -95,6 +109,7 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         beginScope();
         for (Token param : function.params) {
             declare(param);
+            define(param);
             use(param);
         }
         resolve(function.body);
@@ -105,7 +120,7 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     @Override
     public Void visitAssignExpr(Expr.Assign expr) {
         resolve(expr.value);
-        resolveLocal(expr, expr.name);
+        resolveLocal(expr, expr.name, false);
         return null;
     }
 

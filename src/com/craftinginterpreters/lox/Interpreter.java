@@ -260,7 +260,7 @@ public class Interpreter implements Expr.Visitor<Object>,
         return object.toString();
     }
 
-    void resolve(Expr expr, int depth) {
+    void resolve(Expr expr, int depth, int idx) {
         locals.put(expr, depth);
     }
 
