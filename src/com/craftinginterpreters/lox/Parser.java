@@ -10,7 +10,6 @@ class Parser {
     private static class ParseError extends RuntimeException {}
     private final List<Token> tokens;
     private int current = 0;
-    private int in_loop = 0;
 
     Parser(List<Token> tokens) {
         this.tokens = tokens;
@@ -27,7 +26,7 @@ class Parser {
 
     private Stmt declaration() {
         try {
-            if (match(FUN)) return function("function");
+            if (match(FUN)) return functionStatement("function");
             if (match(VAR)) return varDeclaration();
 
             return statement();
@@ -37,9 +36,22 @@ class Parser {
         }
     }
 
-    private Stmt.Function function(String kind) {
-        Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
-        consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+    private Expr.Function function(String kind) {
+        Token name;
+        if (!check(IDENTIFIER)) {
+            if (!kind.equals("lambda")) {
+                error(peek(), "Expect named " + kind + ".");
+            }
+            name = new Token(IDENTIFIER, null, null, previous().line());
+            consume(LEFT_PAREN, "Expect '(' after 'fun'.");
+        } else {
+            if (kind.equals("lambda")) {
+                error(peek(), "Can't have named lambda.");
+            }
+            name = consume(IDENTIFIER, "");
+            consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+        }
+
         List<Token> parameters = new ArrayList<>();
         if (!check(RIGHT_PAREN)) {
             do {
@@ -55,7 +67,11 @@ class Parser {
 
         consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
         List<Stmt> body = block();
-        return new Stmt.Function(name, parameters, body);
+        return new Expr.Function(name, parameters, body);
+    }
+
+    private Stmt.Function functionStatement(String kind) {
+        return new Stmt.Function(function(kind));
     }
 
     private Stmt statement() {
@@ -71,12 +87,9 @@ class Parser {
     }
 
     private Stmt breakStatement() {
-        if (in_loop == 0) {
-            throw error(previous(), "'break' must be in a loop.");
-        }
+        Token keyword = previous();
         consume(SEMICOLON, "Expect ';' after 'break'.");
-
-        return new Stmt.Break();
+        return new Stmt.Break(keyword);
     }
 
     Stmt returnStatement() {
@@ -125,9 +138,7 @@ class Parser {
             increment = expression();
         }
         consume(RIGHT_PAREN, "Expect ')' after for clauses.");
-        in_loop++;
         Stmt body = statement();
-        in_loop--;
 
         if (increment != null) {
             body = new Stmt.Block(
@@ -150,9 +161,7 @@ class Parser {
         consume(LEFT_PAREN, "Expect '(' after 'while'.");
         Expr condition = expression();
         consume(RIGHT_PAREN, "Expect ')' after while condition.");
-        in_loop++;
         Stmt body = statement();
-        in_loop--;
 
         return new Stmt.While(condition, body);
     }
@@ -353,6 +362,7 @@ class Parser {
     }
 
     private Expr primary() {
+        if (match(FUN)) return function("lambda");
         if (match(FALSE)) return new Expr.Literal(false);
         if (match(TRUE)) return new Expr.Literal(true);
         if (match(NIL)) return new Expr.Literal(null);
