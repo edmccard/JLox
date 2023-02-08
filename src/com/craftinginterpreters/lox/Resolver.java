@@ -16,15 +16,14 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     private enum ClassType {
         NONE,
         CLASS,
+        SUBCLASS,
     }
 
     private sealed interface ResolveType
             permits ResolveType.Declared, ResolveType.Defined, ResolveType.Used {
-        record Declared(int idx) implements ResolveType {}
-        record Defined(int line, int idx) implements ResolveType {}
-        record Used(int idx) implements ResolveType {}
-
-        int idx();
+        record Declared() implements ResolveType {}
+        record Defined(int line) implements ResolveType {}
+        record Used() implements ResolveType {}
     }
 
     private final Interpreter interpreter;
@@ -74,7 +73,7 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
             Lox.error(name,
                     "Already a variable with this name in this scope.");
         }
-        scope.put(name.lexeme(), new ResolveType.Declared(scope.size()));
+        scope.put(name.lexeme(), new ResolveType.Declared());
     }
 
     private void define(Token name) {
@@ -82,14 +81,14 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         var scope = scopes.peek();
         var info = scope.get(name.lexeme());
         scope.put(name.lexeme(),
-                new ResolveType.Defined(name.line(), info.idx()));
+                new ResolveType.Defined(name.line()));
     }
 
     private void use(Token name) {
         if (scopes.isEmpty()) return;
         var scope = scopes.peek();
         var info = scope.get(name.lexeme());
-        scope.put(name.lexeme(), new ResolveType.Used(info.idx()));
+        scope.put(name.lexeme(), new ResolveType.Used());
     }
 
     private void resolveLocal(Expr expr, Token name) {
@@ -102,9 +101,9 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
             var info = scope.get(name.lexeme());
             if (info != null) {
                 if (isUse) {
-                    scope.put(name.lexeme(), new ResolveType.Used(info.idx()));
+                    scope.put(name.lexeme(), new ResolveType.Used());
                 }
-                interpreter.resolve(expr, scopes.size() - 1 - i, info.idx());
+                interpreter.resolve(expr, scopes.size() - 1 - i);
                 return;
             }
         }
@@ -188,6 +187,18 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Void visitSuperExpr(Expr.Super expr) {
+        resolveLocal(expr, expr.keyword);
+        if (currentClass == ClassType.NONE) {
+            Lox.error(expr.keyword, "Can't use 'super' outside of a class.");
+        } else if (currentClass != ClassType.SUBCLASS) {
+            Lox.error(expr.keyword,
+                    "Can't use 'super' in a class with no superclass.");
+        }
+        return null;
+    }
+
+    @Override
     public Void visitThisExpr(Expr.This expr) {
         if (currentClass == ClassType.NONE) {
             Lox.error(expr.keyword,
@@ -248,12 +259,15 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
 
         if (stmt.superClass != null) {
+            currentClass = ClassType.SUBCLASS;
             resolve(stmt.superClass);
+            beginScope();
+            scopes.peek().put("super", new ResolveType.Used());
         }
 
         beginScope();
         var scope = scopes.peek();
-        scope.put("this", new ResolveType.Declared(scope.size()));
+        scope.put("this", new ResolveType.Declared());
 
         for (Stmt.Function method : stmt.methods) {
             FunctionType declaration = FunctionType.METHOD;
@@ -268,6 +282,11 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
 
         endScope();
+
+        if (stmt.superClass != null) {
+            endScope();
+        }
+
         currentClass = enclosingClass;
         return null;
     }
