@@ -241,6 +241,16 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         declare(stmt.name);
         define(stmt.name);
 
+        if (stmt.superClass != null &&
+                stmt.name.lexeme().equals(stmt.superClass.name.lexeme())) {
+            Lox.error(stmt.superClass.name,
+                    "A class can't inherit from itself.");
+        }
+
+        if (stmt.superClass != null) {
+            resolve(stmt.superClass);
+        }
+
         beginScope();
         var scope = scopes.peek();
         scope.put("this", new ResolveType.Declared(scope.size()));
@@ -250,6 +260,10 @@ class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
             if (method.function.name.lexeme().equals("init")) {
                 declaration = FunctionType.INITIALIZER;
             }
+            resolveFunction(method.function, declaration);
+        }
+        for (Stmt.Function method : stmt.classMethods) {
+            FunctionType declaration = FunctionType.METHOD;
             resolveFunction(method.function, declaration);
         }
 

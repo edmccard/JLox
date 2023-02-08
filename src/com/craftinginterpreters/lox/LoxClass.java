@@ -1,20 +1,37 @@
 package com.craftinginterpreters.lox;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-class LoxClass implements LoxCallable {
+class LoxClass extends LoxInstance implements LoxCallable {
     final String name;
+    final LoxClass superClass;
     private final Map<String, LoxFunction> methods;
 
-    LoxClass(String name, Map<String, LoxFunction> methods) {
+    LoxClass(String name, LoxClass superClass, Map<String, LoxFunction> methods,
+             Map<String, LoxFunction> classMethods) {
+        super(new LoxClass(name + "_class", classMethods));
         this.name = name;
         this.methods = methods;
+        this.superClass = superClass;
+    }
+
+
+    LoxClass(String name, Map<String, LoxFunction> classMethods) {
+        super();
+        this.name = name;
+        this.methods = classMethods;
+        this.superClass = null;
     }
 
     LoxFunction findMethod(String name) {
         if (methods.containsKey(name)) {
             return methods.get(name);
+        }
+
+        if (superClass != null) {
+            return superClass.findMethod(name);
         }
 
         return null;
